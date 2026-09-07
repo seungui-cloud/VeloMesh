@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, Session, SupabaseClient } from '@supabase/supabase-js';
-import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import 'react-native-url-polyfill/auto';
 
@@ -44,7 +43,8 @@ export function displayNameFromSession(session: Session | null): string | null {
  */
 export async function signInWithKakao(): Promise<Session> {
   const supabase = getSupabase();
-  const redirectTo = Linking.createURL('auth/callback'); // velomesh:///auth/callback
+  // Supabase Redirect URLs 목록에 등록된 값과 정확히 일치해야 한다 (슬래시 2개)
+  const redirectTo = 'velomesh://auth/callback';
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'kakao',
