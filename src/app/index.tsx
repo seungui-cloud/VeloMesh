@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Session } from '@supabase/supabase-js';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -13,18 +14,43 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { displayNameFromSession, getSession, signInWithKakao, signOut } from '@/lib/supabase';
 
 /**
- * 홈: 이름 입력 후
+ * 홈: 카카오 로그인(또는 게스트) + 이름 →
  *  - 그룹 만들기 (그룹장) → /create
  *  - 초대 코드로 참가 (그룹원) → /join
  */
 export default function HomeScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
+  const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem('rider-name').then((v) => v && setName(v));
+    getSession()
+      .then((s) => {
+        setSession(s);
+        const kakaoName = displayNameFromSession(s);
+        if (kakaoName) setName((prev) => prev || kakaoName);
+      })
+      .catch(() => {});
+  }, []);
+
+  const kakaoLogin = useCallback(async () => {
+    try {
+      const s = await signInWithKakao();
+      setSession(s);
+      const kakaoName = displayNameFromSession(s);
+      if (kakaoName) setName(kakaoName);
+    } catch (e) {
+      Alert.alert('카카오 로그인 실패', String((e as Error).message));
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    await signOut();
+    setSession(null);
   }, []);
 
   const withName = (path: '/create' | '/join') => {
@@ -37,6 +63,8 @@ export default function HomeScreen() {
     router.push({ pathname: path, params: { name: trimmed } });
   };
 
+  const isKakao = !!session && !session.user.is_anonymous;
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
@@ -46,6 +74,25 @@ export default function HomeScreen() {
           <ThemedText type="title" style={styles.slogan}>
             Stay connected.{'\n'}Ride together.
           </ThemedText>
+
+          {isKakao ? (
+            <ThemedView style={styles.accountRow}>
+              <ThemedText type="small">
+                카카오 로그인됨{displayNameFromSession(session) ? ` · ${displayNameFromSession(session)}` : ''}
+              </ThemedText>
+              <Pressable onPress={logout}>
+                <ThemedText type="small" style={styles.logout}>
+                  로그아웃
+                </ThemedText>
+              </Pressable>
+            </ThemedView>
+          ) : (
+            <Pressable style={styles.kakaoButton} onPress={kakaoLogin}>
+              <ThemedText type="smallBold" style={styles.kakaoLabel}>
+                카카오로 시작하기
+              </ThemedText>
+            </Pressable>
+          )}
 
           <ThemedText type="smallBold">라이더 이름</ThemedText>
           <TextInput
@@ -72,6 +119,12 @@ export default function HomeScreen() {
             </ThemedText>
             <ThemedText type="small">Pack은 자동으로 배정됩니다</ThemedText>
           </Pressable>
+
+          {!isKakao && (
+            <ThemedText type="small" style={styles.guestHint}>
+              로그인 없이 계속하면 게스트로 참가합니다.
+            </ThemedText>
+          )}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </ThemedView>
@@ -82,7 +135,22 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   form: { flex: 1, padding: 24, gap: 10, justifyContent: 'center' },
-  slogan: { marginBottom: 24 },
+  slogan: { marginBottom: 16 },
+  kakaoButton: {
+    backgroundColor: '#FEE500',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  kakaoLabel: { color: '#191919' },
+  accountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  logout: { color: '#E74C3C' },
   input: {
     borderWidth: 1,
     borderColor: '#8884',
@@ -110,4 +178,5 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   secondaryLabel: { color: '#208AEF' },
+  guestHint: { textAlign: 'center', marginTop: 4 },
 });

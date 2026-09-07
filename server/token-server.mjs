@@ -20,6 +20,12 @@ if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET || !LIVEKIT_URL) {
   console.error('LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL을 .env에 설정하세요.');
   process.exit(1);
 }
+if (LIVEKIT_URL.includes('your-project')) {
+  console.error(
+    '.env의 LIVEKIT_URL이 아직 예시 값입니다. LiveKit 대시보드의 실제 wss://…livekit.cloud URL로 교체하세요.',
+  );
+  process.exit(1);
+}
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);

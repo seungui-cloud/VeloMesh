@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, Session, SupabaseClient } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import 'react-native-url-polyfill/auto';
 
 let _client: SupabaseClient | null = null;
@@ -17,10 +19,55 @@ export function getSupabase(): SupabaseClient {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,
+        flowType: 'pkce',
       },
     });
   }
   return _client;
+}
+
+export async function getSession(): Promise<Session | null> {
+  const { data } = await getSupabase().auth.getSession();
+  return data.session;
+}
+
+/** 카카오 계정의 표시 이름 (닉네임 → 이름 → null 순) */
+export function displayNameFromSession(session: Session | null): string | null {
+  const meta = session?.user.user_metadata as Record<string, string> | undefined;
+  return meta?.nickname ?? meta?.name ?? meta?.full_name ?? meta?.preferred_username ?? null;
+}
+
+/**
+ * 카카오 로그인 (Supabase OAuth + PKCE).
+ * 사전 조건: Supabase → Authentication → Providers → Kakao 활성화,
+ * URL Configuration → Redirect URLs에 velomesh:///auth/callback 추가.
+ */
+export async function signInWithKakao(): Promise<Session> {
+  const supabase = getSupabase();
+  const redirectTo = Linking.createURL('auth/callback'); // velomesh:///auth/callback
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'kakao',
+    options: { redirectTo, skipBrowserRedirect: true },
+  });
+  if (error || !data.url) throw new Error(`카카오 로그인 시작 실패: ${error?.message}`);
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (result.type !== 'success') throw new Error('카카오 로그인이 취소되었습니다.');
+
+  const code = new URL(result.url).searchParams.get('code');
+  if (!code) throw new Error('카카오 로그인 응답에 인증 코드가 없습니다.');
+
+  const { data: exchanged, error: exchangeError } =
+    await supabase.auth.exchangeCodeForSession(code);
+  if (exchangeError || !exchanged.session) {
+    throw new Error(`세션 교환 실패: ${exchangeError?.message}`);
+  }
+  return exchanged.session;
+}
+
+export async function signOut(): Promise<void> {
+  await getSupabase().auth.signOut();
 }
 
 /** 세션이 없으면 익명 로그인. Low Friction 원칙 — 회원가입 없이 바로 참가. */
