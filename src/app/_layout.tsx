@@ -13,6 +13,7 @@ export default function RootLayout() {
         <Stack.Screen name="create" options={{ title: '그룹 만들기' }} />
         <Stack.Screen name="join" options={{ title: '초대 코드로 참가' }} />
         <Stack.Screen name="room" options={{ title: 'Pack Voice', headerBackTitle: '나가기' }} />
+        <Stack.Screen name="di2" options={{ title: 'Di2 Phone Bell' }} />
       </Stack>
     </ThemeProvider>
   );

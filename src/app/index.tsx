@@ -120,6 +120,12 @@ export default function HomeScreen() {
             <ThemedText type="small">Pack은 자동으로 배정됩니다</ThemedText>
           </Pressable>
 
+          <Pressable style={styles.bellEntry} onPress={() => router.push('/di2')}>
+            <ThemedText type="smallBold" style={styles.secondaryLabel}>
+              🔔 Di2 Phone Bell
+            </ThemedText>
+          </Pressable>
+
           {!isKakao && (
             <ThemedText type="small" style={styles.guestHint}>
               로그인 없이 계속하면 게스트로 참가합니다.
@@ -178,5 +184,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   secondaryLabel: { color: '#208AEF' },
+  bellEntry: { alignItems: 'center', paddingVertical: 12 },
   guestHint: { textAlign: 'center', marginTop: 4 },
 });
