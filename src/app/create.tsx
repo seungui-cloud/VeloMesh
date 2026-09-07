@@ -55,8 +55,8 @@ export default function CreateScreen() {
   const enter = () => {
     if (!result) return;
     router.replace({
-      pathname: '/room',
-      params: { name: name!, ride: result.code, pack: result.pack_name },
+      pathname: '/packs',
+      params: { name: name!, ride: result.code },
     });
   };
 
@@ -81,7 +81,7 @@ export default function CreateScreen() {
           </Pressable>
           <Pressable style={styles.primaryButton} onPress={enter}>
             <ThemedText type="subtitle" style={styles.primaryLabel}>
-              Pack {result.pack_name} 입장 (그룹장)
+              Pack 선택하고 입장
             </ThemedText>
           </Pressable>
         </SafeAreaView>

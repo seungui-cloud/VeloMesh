@@ -42,8 +42,8 @@ export default function JoinScreen() {
       AsyncStorage.setItem('rider-name', trimmedName);
       const membership = await joinRide(trimmedCode, trimmedName);
       router.replace({
-        pathname: '/room',
-        params: { name: trimmedName, ride: membership.code, pack: membership.pack_name },
+        pathname: '/packs',
+        params: { name: trimmedName, ride: membership.code },
       });
     } catch (e) {
       Alert.alert('오류', String((e as Error).message));

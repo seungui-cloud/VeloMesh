@@ -109,6 +109,69 @@ export async function createRide(
   return data as RideMembership;
 }
 
+export interface PackInfo {
+  id: string;
+  name: string;
+  riders: number;
+  mine: boolean;
+}
+
+export interface RidePacks {
+  rideId: string;
+  title: string;
+  code: string;
+  packs: PackInfo[];
+}
+
+/** Ride의 Pack 목록 + 인원수 + 내 배정 조회 */
+export async function listPacks(code: string): Promise<RidePacks> {
+  const userId = await ensureSignedIn();
+  const supabase = getSupabase();
+
+  const { data: ride, error: rideError } = await supabase
+    .from('rides')
+    .select('id, title, code')
+    .eq('code', code.toUpperCase())
+    .single();
+  if (rideError || !ride) throw new Error('Ride를 찾을 수 없습니다.');
+
+  const [{ data: packs, error: packsError }, { data: participants }] = await Promise.all([
+    supabase.from('packs').select('id, name, position').eq('ride_id', ride.id).order('position'),
+    supabase.from('participants').select('user_id, pack_id').eq('ride_id', ride.id),
+  ]);
+  if (packsError || !packs) throw new Error('Pack 목록을 불러오지 못했습니다.');
+
+  const counts = new Map<string, number>();
+  let myPackId: string | null = null;
+  for (const p of participants ?? []) {
+    if (p.pack_id) counts.set(p.pack_id, (counts.get(p.pack_id) ?? 0) + 1);
+    if (p.user_id === userId) myPackId = p.pack_id;
+  }
+
+  return {
+    rideId: ride.id,
+    title: ride.title,
+    code: ride.code,
+    packs: packs.map((p) => ({
+      id: p.id,
+      name: p.name,
+      riders: counts.get(p.id) ?? 0,
+      mine: p.id === myPackId,
+    })),
+  };
+}
+
+/** 내 Pack 이동 (RLS: 본인 participant 행만 수정 가능) */
+export async function switchPack(rideId: string, packId: string): Promise<void> {
+  const userId = await ensureSignedIn();
+  const { error } = await getSupabase()
+    .from('participants')
+    .update({ pack_id: packId })
+    .eq('ride_id', rideId)
+    .eq('user_id', userId);
+  if (error) throw new Error(`Pack 이동 실패: ${error.message}`);
+}
+
 /** 참가자: 초대 코드로 참가, 인원 최소 Pack에 자동 배정 */
 export async function joinRide(code: string, displayName: string): Promise<RideMembership> {
   await ensureSignedIn();
