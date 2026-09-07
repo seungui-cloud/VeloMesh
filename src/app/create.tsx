@@ -15,15 +15,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { createRide, RideMembership } from '@/lib/supabase';
 
-const PACK_PRESETS = [1, 2, 3] as const;
-const PACK_NAMES = ['A', 'B', 'C'];
+const MAX_PACKS = 12;
+/** A, B, C … 순서로 Pack 이름 생성 */
+const packNames = (count: number) =>
+  Array.from({ length: count }, (_, i) => String.fromCharCode(65 + i));
 
 /** 그룹장: 그룹(Ride) + Pack 생성 → 초대 코드 공유 → 입장 */
 export default function CreateScreen() {
   const router = useRouter();
   const { name } = useLocalSearchParams<{ name: string }>();
   const [title, setTitle] = useState('');
-  const [packCount, setPackCount] = useState<(typeof PACK_PRESETS)[number]>(2);
+  const [packCount, setPackCount] = useState(2);
   const [creating, setCreating] = useState(false);
   const [result, setResult] = useState<RideMembership | null>(null);
 
@@ -35,7 +37,7 @@ export default function CreateScreen() {
     }
     setCreating(true);
     try {
-      setResult(await createRide(trimmed, PACK_NAMES.slice(0, packCount), name!));
+      setResult(await createRide(trimmed, packNames(packCount), name!));
     } catch (e) {
       Alert.alert('오류', String((e as Error).message));
     } finally {
@@ -102,23 +104,22 @@ export default function CreateScreen() {
 
           <ThemedText type="smallBold">Pack 수</ThemedText>
           <View style={styles.packRow}>
-            {PACK_PRESETS.map((n) => (
-              <Pressable
-                key={n}
-                onPress={() => setPackCount(n)}
-                style={[styles.packButton, packCount === n && styles.packButtonActive]}>
-                <ThemedText
-                  type="smallBold"
-                  style={packCount === n ? styles.primaryLabel : undefined}>
-                  {n}개
-                </ThemedText>
-                <ThemedText
-                  type="small"
-                  style={packCount === n ? styles.primaryLabel : undefined}>
-                  {PACK_NAMES.slice(0, n).join('·')}
-                </ThemedText>
-              </Pressable>
-            ))}
+            <Pressable
+              style={[styles.stepButton, packCount <= 1 && styles.stepButtonDisabled]}
+              onPress={() => setPackCount((c) => Math.max(1, c - 1))}>
+              <ThemedText type="subtitle">−</ThemedText>
+            </Pressable>
+            <View style={styles.packCountBox}>
+              <ThemedText type="subtitle">{packCount}개</ThemedText>
+              <ThemedText type="small">
+                {packNames(packCount).join('·')}
+              </ThemedText>
+            </View>
+            <Pressable
+              style={[styles.stepButton, packCount >= MAX_PACKS && styles.stepButtonDisabled]}
+              onPress={() => setPackCount((c) => Math.min(MAX_PACKS, c + 1))}>
+              <ThemedText type="subtitle">＋</ThemedText>
+            </Pressable>
           </View>
         </View>
 
@@ -152,17 +153,25 @@ const styles = StyleSheet.create({
     color: '#208AEF',
     marginBottom: 8,
   },
-  packRow: { flexDirection: 'row', gap: 8 },
-  packButton: {
-    flex: 1,
+  packRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
+  stepButton: {
+    width: 64,
     borderWidth: 1,
     borderColor: '#8884',
     borderRadius: 12,
-    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepButtonDisabled: { opacity: 0.3 },
+  packCountBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#208AEF',
+    borderRadius: 12,
+    paddingVertical: 10,
     alignItems: 'center',
     gap: 2,
   },
-  packButtonActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
   primaryButton: {
     backgroundColor: '#208AEF',
     borderRadius: 16,

@@ -10,7 +10,7 @@ export interface TokenResponse {
  * room = "ride:<rideCode>:pack:<packName>" 형태의 채널 이름.
  */
 export async function fetchToken(room: string, identity: string): Promise<TokenResponse> {
-  const endpoint = `${config.tokenEndpoint.replace(/\/$/, '')}/token?room=${encodeURIComponent(
+  const endpoint = `${config.tokenEndpoint}?room=${encodeURIComponent(
     room,
   )}&identity=${encodeURIComponent(identity)}`;
   const res = await fetch(endpoint);
