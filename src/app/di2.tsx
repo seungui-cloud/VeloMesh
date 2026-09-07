@@ -14,29 +14,75 @@ import {
   requestBlePermissions,
   waitForPoweredOn,
 } from '@/lib/di2';
+import {
+  ButtonMap,
+  ButtonSide,
+  Di2GestureEngine,
+  GESTURE_LABEL,
+  SIDE_LABEL,
+  loadButtonMap,
+  saveButtonMap,
+} from '@/lib/di2-gestures';
+
+interface LogLine {
+  key: string;
+  text: string;
+  kind: 'raw' | 'gesture' | 'info';
+}
 
 /**
  * Di2 Phone Bell + BLE PoC 화면 (기획서 21~24장, PoC 03).
  * - 큰 벨 버튼: 항상 동작 (서버/네트워크/Di2 무관)
- * - BLE 스캔 → Di2 연결 → 모든 notify characteristic 구독 → 이벤트 로그
- * - "이벤트 수신 시 벨 울리기"를 켜면 히든버튼 → 벨 파이프라인 검증 가능
+ * - BLE 스캔 → Di2 연결 → 버튼 학습(왼/오) → 짧게·2번·길게 제스처 판별 → 벨
  */
 export default function Di2Screen() {
   const [scanning, setScanning] = useState(false);
   const [devices, setDevices] = useState<ScannedDevice[]>([]);
   const [connected, setConnected] = useState<Device | null>(null);
-  const [events, setEvents] = useState<(Di2Event & { key: string })[]>([]);
+  const [log, setLog] = useState<LogLine[]>([]);
   const [info, setInfo] = useState('');
-  const [bellOnEvent, setBellOnEvent] = useState(true);
-  const bellOnEventRef = useRef(bellOnEvent);
+  const [bellOnRaw, setBellOnRaw] = useState(false);
+  const [buttonMap, setButtonMap] = useState<ButtonMap>({});
+  const [learning, setLearning] = useState<ButtonSide | null>(null);
+
+  const bellOnRawRef = useRef(bellOnRaw);
   const stopMonitorRef = useRef<(() => void) | null>(null);
   const lastBellRef = useRef(0);
+  const engineRef = useRef<Di2GestureEngine | null>(null);
 
-  bellOnEventRef.current = bellOnEvent;
+  bellOnRawRef.current = bellOnRaw;
+
+  const addLog = (text: string, kind: LogLine['kind']) => {
+    setLog((prev) =>
+      [{ key: `${Date.now()}-${Math.random()}`, text, kind }, ...prev].slice(0, 40),
+    );
+  };
 
   useEffect(() => {
     prepareBell();
+    const engine = new Di2GestureEngine(
+      (g) => {
+        addLog(`🎯 ${SIDE_LABEL[g.side]} 버튼 ${GESTURE_LABEL[g.kind]}`, 'gesture');
+        // 기본 매핑: 짧게 1번 = 벨, 2번 = 벨 (추후 Quick Event 매핑 예정), 길게 = 벨
+        playBell();
+        if (g.kind === 'double') setTimeout(playBell, 350);
+      },
+      (side, sig) => {
+        setLearning(null);
+        setButtonMap((prev) => ({ ...prev, [side]: sig }));
+        addLog(
+          `✅ ${SIDE_LABEL[side]} 버튼 등록 완료 (${sig.release ? '누름+뗌 인식 → 길게 판별 가능' : '누름만 인식 → 짧게/2번 판별'})`,
+          'info',
+        );
+      },
+    );
+    engineRef.current = engine;
+    loadButtonMap().then((m) => {
+      engine.setMap(m);
+      setButtonMap(m);
+    });
     return () => {
+      engine.dispose();
       getBleManager().stopDeviceScan();
       stopMonitorRef.current?.();
       connected?.cancelConnection().catch(() => {});
@@ -65,9 +111,12 @@ export default function Di2Screen() {
           if (prev.some((d) => d.id === device.id)) return prev;
           const next = [
             ...prev,
-            { id: device.id, name: device.name ?? device.localName ?? '(이름 없음)', rssi: device.rssi },
+            {
+              id: device.id,
+              name: device.name ?? device.localName ?? '(이름 없음)',
+              rssi: device.rssi,
+            },
           ];
-          // 이름 있는 기기 우선 + 신호 세기순
           return next.sort((a, b) => {
             const an = a.name !== '(이름 없음)' ? 0 : 1;
             const bn = b.name !== '(이름 없음)' ? 0 : 1;
@@ -86,26 +135,28 @@ export default function Di2Screen() {
     setScanning(false);
   };
 
+  const onEvent = (e: Di2Event) => {
+    const consumed = engineRef.current?.feed(e.charUUID, e.hex, e.ts) ?? false;
+    if (engineRef.current?.isLearning()) {
+      addLog(`👂 학습 신호 수신: ${e.charUUID.slice(4, 8)} · ${e.hex}`, 'info');
+      return;
+    }
+    if (!consumed) {
+      addLog(`${e.charUUID.slice(4, 8)} · ${e.hex}`, 'raw');
+      if (bellOnRawRef.current && Date.now() - lastBellRef.current > 300) {
+        lastBellRef.current = Date.now();
+        playBell();
+      }
+    }
+  };
+
   const connect = async (id: string) => {
     stopScan();
     setInfo('연결 중…');
     try {
       const device = await getBleManager().connectToDevice(id, { timeout: 15000 });
       setConnected(device);
-      const stop = await monitorAllCharacteristics(
-        device,
-        (e) => {
-          setEvents((prev) =>
-            [{ ...e, key: `${e.ts}-${e.charUUID}` }, ...prev].slice(0, 30),
-          );
-          // 이벤트 → 벨 (300ms 디바운스: 연타/멀티패킷 방지)
-          if (bellOnEventRef.current && Date.now() - lastBellRef.current > 300) {
-            lastBellRef.current = Date.now();
-            playBell();
-          }
-        },
-        setInfo,
-      );
+      const stop = await monitorAllCharacteristics(device, onEvent, setInfo);
       stopMonitorRef.current = stop;
       device.onDisconnected(() => {
         setConnected(null);
@@ -125,6 +176,19 @@ export default function Di2Screen() {
     await connected?.cancelConnection().catch(() => {});
     setConnected(null);
     setInfo('');
+  };
+
+  const learn = (side: ButtonSide) => {
+    engineRef.current?.startLearning(side);
+    setLearning(side);
+    addLog(`${SIDE_LABEL[side]} 버튼 학습 대기 — 지금 Di2 ${SIDE_LABEL[side]} 히든버튼을 한 번 누르세요`, 'info');
+  };
+
+  const resetButtons = () => {
+    engineRef.current?.setMap({});
+    setButtonMap({});
+    saveButtonMap({});
+    addLog('버튼 등록 초기화됨', 'info');
   };
 
   return (
@@ -161,28 +225,51 @@ export default function Di2Screen() {
             <ThemedText type="small">
               연결됨: {connected.name ?? connected.id} {info ? `· ${info}` : ''}
             </ThemedText>
-            <View style={styles.toggleRow}>
-              <ThemedText type="small">이벤트 수신 시 벨 울리기</ThemedText>
-              <Switch value={bellOnEvent} onValueChange={setBellOnEvent} />
+
+            <View style={styles.learnRow}>
+              {(['left', 'right'] as ButtonSide[]).map((side) => (
+                <Pressable
+                  key={side}
+                  style={[styles.learnButton, learning === side && styles.learnButtonActive]}
+                  onPress={() => learn(side)}>
+                  <ThemedText
+                    type="smallBold"
+                    style={learning === side ? styles.bellLabel : styles.link}>
+                    {learning === side
+                      ? '버튼을 누르세요…'
+                      : `${SIDE_LABEL[side]} 학습${buttonMap[side] ? ' ✓' : ''}`}
+                  </ThemedText>
+                </Pressable>
+              ))}
+              <Pressable style={styles.resetButton} onPress={resetButtons}>
+                <ThemedText type="small" style={styles.danger}>
+                  초기화
+                </ThemedText>
+              </Pressable>
             </View>
-            <ThemedText type="small" style={styles.hint}>
-              Di2 히든버튼을 눌러보세요. 아래에 수신 이벤트가 기록됩니다.
-            </ThemedText>
+
+            <View style={styles.toggleRow}>
+              <ThemedText type="small">미등록 신호에도 벨 울리기</ThemedText>
+              <Switch value={bellOnRaw} onValueChange={setBellOnRaw} />
+            </View>
+
             <FlatList
               style={styles.list}
-              data={events}
-              keyExtractor={(e) => e.key}
+              data={log}
+              keyExtractor={(l) => l.key}
               renderItem={({ item }) => (
                 <View style={styles.eventRow}>
-                  <ThemedText type="code" style={styles.eventText}>
-                    {new Date(item.ts).toLocaleTimeString()} · {item.charUUID.slice(4, 8)} ·{' '}
-                    {item.hex}
+                  <ThemedText
+                    type={item.kind === 'gesture' ? 'smallBold' : 'code'}
+                    style={[styles.eventText, item.kind === 'gesture' && styles.gestureText]}>
+                    {item.text}
                   </ThemedText>
                 </View>
               )}
               ListEmptyComponent={
                 <ThemedText type="small" style={styles.hint}>
-                  아직 수신된 이벤트가 없습니다.
+                  왼쪽/오른쪽 학습을 누른 뒤 Di2 히든버튼을 누르면 버튼이 등록되고,{'\n'}
+                  이후 짧게 1번 / 2번 연속 / 길게가 각각 판별됩니다.
                 </ThemedText>
               }
             />
@@ -221,7 +308,7 @@ const styles = StyleSheet.create({
   bellButton: {
     backgroundColor: '#208AEF',
     borderRadius: 20,
-    paddingVertical: 32,
+    paddingVertical: 28,
     alignItems: 'center',
     gap: 4,
   },
@@ -234,6 +321,17 @@ const styles = StyleSheet.create({
   },
   link: { color: '#208AEF' },
   danger: { color: '#E74C3C' },
+  learnRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  learnButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#208AEF',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  learnButtonActive: { backgroundColor: '#208AEF' },
+  resetButton: { paddingHorizontal: 4 },
   toggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -250,6 +348,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deviceInfo: { flex: 1, gap: 2 },
-  eventRow: { paddingVertical: 6 },
+  eventRow: { paddingVertical: 5 },
   eventText: { fontSize: 12 },
+  gestureText: { color: '#208AEF', fontSize: 14 },
 });
