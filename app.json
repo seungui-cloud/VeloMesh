@@ -74,7 +74,8 @@
           "bluetoothAlwaysPermission": "Di2 히든버튼 연동을 위해 Bluetooth 접근이 필요합니다."
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "@maplibre/maplibre-react-native"
     ],
     "experiments": {
       "typedRoutes": true,

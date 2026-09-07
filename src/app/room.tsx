@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PackMap } from '@/components/pack-map';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useLocationSharing } from '@/hooks/use-location-sharing';
@@ -94,6 +95,8 @@ function PackVoiceView({ pack }: { pack: string }) {
             {myLocation ? ` · ${formatSpeed(myLocation.speed)}` : ''}
           </ThemedText>
         </View>
+
+        <PackMap myLocation={myLocation} riderLocations={riderLocations} />
 
         <FlatList
           data={participants}
