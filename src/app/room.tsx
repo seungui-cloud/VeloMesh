@@ -1,6 +1,7 @@
 import {
   AudioSession,
   LiveKitRoom,
+  useConnectionState,
   useLocalParticipant,
   useParticipants,
   useRoomContext,
@@ -75,7 +76,8 @@ function PackVoiceView({ pack }: { pack: string }) {
   const room = useRoomContext();
   const participants = useParticipants();
   const { isMicrophoneEnabled, localParticipant } = useLocalParticipant();
-  const connected = room?.state === ConnectionState.Connected;
+  const connectionState = useConnectionState(room);
+  const connected = connectionState === ConnectionState.Connected;
   const { myLocation, riderLocations } = useLocationSharing(room, connected);
 
   const toggleMic = () => {

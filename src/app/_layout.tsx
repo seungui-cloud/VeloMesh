@@ -1,11 +1,8 @@
 import { registerGlobals } from '@livekit/react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider, Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 
 registerGlobals();
-
-SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -13,6 +10,8 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="index" options={{ title: 'VeloMesh' }} />
+        <Stack.Screen name="create" options={{ title: '그룹 만들기' }} />
+        <Stack.Screen name="join" options={{ title: '초대 코드로 참가' }} />
         <Stack.Screen name="room" options={{ title: 'Pack Voice', headerBackTitle: '나가기' }} />
       </Stack>
     </ThemeProvider>

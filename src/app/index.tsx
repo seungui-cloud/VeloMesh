@@ -13,49 +13,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { assertConfig } from '@/lib/config';
-
-const PACKS = ['A', 'B', 'C'] as const;
 
 /**
- * Voice PoC 진입 화면.
- * 라이더 이름 + Ride 코드 + Pack 선택 → Pack Voice 참가.
- * (Club/Ride 관리는 MVP v0.2에서 Supabase 기반으로 확장)
+ * 홈: 이름 입력 후
+ *  - 그룹 만들기 (그룹장) → /create
+ *  - 초대 코드로 참가 (그룹원) → /join
  */
 export default function HomeScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
-  const [rideCode, setRideCode] = useState('');
-  const [pack, setPack] = useState<(typeof PACKS)[number]>('A');
 
   useEffect(() => {
-    AsyncStorage.multiGet(['rider-name', 'ride-code']).then((entries) => {
-      const saved = Object.fromEntries(entries);
-      if (saved['rider-name']) setName(saved['rider-name']);
-      if (saved['ride-code']) setRideCode(saved['ride-code']);
-    });
+    AsyncStorage.getItem('rider-name').then((v) => v && setName(v));
   }, []);
 
-  const join = () => {
-    const configError = assertConfig();
-    if (configError) {
-      Alert.alert('설정 필요', configError);
+  const withName = (path: '/create' | '/join') => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      Alert.alert('입력 필요', '라이더 이름을 입력하세요.');
       return;
     }
-    const trimmedName = name.trim();
-    const trimmedCode = rideCode.trim().toUpperCase();
-    if (!trimmedName || !trimmedCode) {
-      Alert.alert('입력 필요', '이름과 Ride 코드를 입력하세요.');
-      return;
-    }
-    AsyncStorage.multiSet([
-      ['rider-name', trimmedName],
-      ['ride-code', trimmedCode],
-    ]);
-    router.push({
-      pathname: '/room',
-      params: { name: trimmedName, ride: trimmedCode, pack },
-    });
+    AsyncStorage.setItem('rider-name', trimmed);
+    router.push({ pathname: path, params: { name: trimmed } });
   };
 
   return (
@@ -73,42 +52,25 @@ export default function HomeScreen() {
             style={styles.input}
             value={name}
             onChangeText={setName}
-            placeholder="예: 승의"
+            placeholder="예: 홍길동"
             placeholderTextColor="#888"
             autoCapitalize="none"
           />
 
-          <ThemedText type="smallBold">Ride 코드</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={rideCode}
-            onChangeText={setRideCode}
-            placeholder="예: SUNDAY (같은 코드 = 같은 Ride)"
-            placeholderTextColor="#888"
-            autoCapitalize="characters"
-            autoCorrect={false}
-          />
-
-          <ThemedText type="smallBold">Pack</ThemedText>
-          <ThemedView style={styles.packRow}>
-            {PACKS.map((p) => (
-              <Pressable
-                key={p}
-                onPress={() => setPack(p)}
-                style={[styles.packButton, pack === p && styles.packButtonActive]}>
-                <ThemedText
-                  type="smallBold"
-                  style={pack === p ? styles.packLabelActive : undefined}>
-                  Pack {p}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </ThemedView>
-
-          <Pressable style={styles.joinButton} onPress={join}>
-            <ThemedText type="subtitle" style={styles.joinLabel}>
-              Pack Voice 참가
+          <Pressable style={styles.primaryButton} onPress={() => withName('/create')}>
+            <ThemedText type="subtitle" style={styles.primaryLabel}>
+              그룹 만들기
             </ThemedText>
+            <ThemedText type="small" style={styles.primaryLabel}>
+              그룹장 — Ride와 Pack을 만들고 초대
+            </ThemedText>
+          </Pressable>
+
+          <Pressable style={styles.secondaryButton} onPress={() => withName('/join')}>
+            <ThemedText type="subtitle" style={styles.secondaryLabel}>
+              초대 코드로 참가
+            </ThemedText>
+            <ThemedText type="small">Pack은 자동으로 배정됩니다</ThemedText>
           </Pressable>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -129,24 +91,23 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: '#208AEF',
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  packRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  packButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#8884',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  packButtonActive: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
-  packLabelActive: { color: '#fff' },
-  joinButton: {
+  primaryButton: {
     backgroundColor: '#208AEF',
     borderRadius: 16,
-    paddingVertical: 18,
+    paddingVertical: 20,
     alignItems: 'center',
+    gap: 4,
   },
-  joinLabel: { color: '#fff' },
+  primaryLabel: { color: '#fff' },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: '#208AEF',
+    borderRadius: 16,
+    paddingVertical: 20,
+    alignItems: 'center',
+    gap: 4,
+  },
+  secondaryLabel: { color: '#208AEF' },
 });
