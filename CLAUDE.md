@@ -9,10 +9,20 @@
 - **Supabase** — MVP v0.2부터 Club/Ride/Pack/인증 (`supabase/schema.sql`, 아직 미프로비저닝).
 - CNG: `/ios` `/android`는 gitignore, `npx expo prebuild`로 재생성.
 
-## 환경 주의
+## 개발환경 (이 Mac 전용 주의사항)
 
-- 기본 셸 Node는 v14 (nvm) — **반드시 `export PATH="/Users/seungui/.volta/bin:$PATH"`로 Node 22 사용.**
-- 개발 토큰 서버: `npm run token-server` (`server/token-server.mjs`, .env에 LIVEKIT_* 키 필요). 앱은 `EXPO_PUBLIC_TOKEN_ENDPOINT`(PC LAN IP)로 접근.
+- **Node**: 기본 셸 Node는 v14 (nvm이 PATH 선점) — 모든 명령 앞에 `export PATH="/Users/seungui/.volta/bin:$PATH"` (Node 22) 또는 `/opt/homebrew/bin` (Node 26). 안 하면 `node:events` 오류.
+- **Java**: Gradle 9는 JDK 17+ 필요 — `export JAVA_HOME=/Users/seungui/Library/Java/JavaVirtualMachines/corretto-17.0.9/Contents/Home` (기본 JAVA는 11이라 실패).
+- **CocoaPods**: `/opt/homebrew/bin/pod` (1.17) 사용. `/usr/local/bin/pod`(1.8)는 구버전이라 실패 — PATH에서 homebrew 우선.
+- **adb 유령 기기**: Docker가 5554 포트를 점유해 `emulator-5554 offline`이 항상 표시됨. 이 때문에 `expo run:android`가 실패 → **gradle 직접 실행** + `ANDROID_SERIAL` 지정으로 우회.
+- **실기기**: 아이폰17 UDID `00008150-000C5969018A401C` (무선 페어링, 서명 "Apple Development: seungui park" 자동). 갤럭시 A32 `RF9R406VGAZ` (USB).
+- **빌드 명령**:
+  - iOS Release: `npx expo run:ios --device 00008150-000C5969018A401C --configuration Release`
+  - Android Release: `cd android && ANDROID_SERIAL=RF9R406VGAZ ./gradlew :app:installRelease` (JAVA_HOME 필수)
+  - 네이티브 모듈/플러그인 변경 시 먼저 `npx expo prebuild`
+- **토큰 발급**: 기본은 Supabase Edge Function(`livekit-token`, 배포됨) — Mac 불필요. 로컬 개발 시에만 `npm run token-server` + `.env`의 `EXPO_PUBLIC_DEV_TOKEN_ENDPOINT`.
+- **Supabase**: 프로젝트 ref `ixzpubswrniaenikgqex` (서울). CLI 로그인됨 — SQL 실행: `npx supabase db query --linked --project-ref ixzpubswrniaenikgqex --yes -f <file>`.
+- **`.env`는 절대 읽지 말 것** (cat/grep 포함, 사용자 지시). 빌드가 자동 로드함.
 
 ## 도메인 규칙
 
