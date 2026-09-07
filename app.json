@@ -1,22 +1,37 @@
 {
   "expo": {
     "name": "VeloMesh",
-    "slug": "VeloMesh",
-    "version": "1.0.0",
+    "slug": "velomesh",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "velomesh",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.velomesh.app",
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Pack Voice 그룹통화를 위해 마이크 접근이 필요합니다.",
+        "NSLocationWhenInUseUsageDescription": "Pack 위치 공유를 위해 위치 접근이 필요합니다.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "라이딩 중 백그라운드에서도 Pack 위치를 공유하기 위해 필요합니다.",
+        "UIBackgroundModes": ["audio", "location"]
+      }
     },
     "android": {
+      "package": "com.velomesh.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "permissions": [
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -25,6 +40,22 @@
     },
     "plugins": [
       "expo-router",
+      "@livekit/react-native-expo-plugin",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "VeloMesh는 카메라를 사용하지 않지만 WebRTC 모듈 초기화에 권한 설명이 필요합니다.",
+          "microphonePermission": "Pack Voice 그룹통화를 위해 마이크 접근이 필요합니다."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pack 위치 공유를 위해 위치 접근이 필요합니다.",
+          "locationAlwaysAndWhenInUsePermission": "라이딩 중 백그라운드에서도 Pack 위치를 공유하기 위해 필요합니다.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
       [
         "expo-splash-screen",
         {

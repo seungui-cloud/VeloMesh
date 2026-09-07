@@ -1,56 +1,72 @@
-# Welcome to your Expo app 👋
+# VeloMesh
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**Stay connected. Ride together.**
 
-## Get started
+골전도/블루투스 이어폰과 스마트폰만으로 그룹라이딩 통신과 Pack 관리를 제공하는 크로스플랫폼 앱.
 
-1. Install dependencies
+- 기획서: `VeloMesh_Service_Plan_v0.2.md` (Downloads)
+- 스택: **Expo (React Native) · LiveKit (Voice RTC) · Supabase (App Backend)**
 
-   ```bash
-   npm install
-   ```
+## 현재 상태 — MVP v0.1 Voice PoC
 
-2. Start the app
+- Ride 코드 + Pack 선택으로 참가 (`velomesh:<RIDE>:pack-<PACK>` LiveKit 룸)
+- 3~5명 Full Duplex Pack Voice (Opus, AEC/NS/AGC는 LiveKit 기본 제공)
+- 발화 표시, 음소거 큰 버튼 (Hands-on-Bar UX)
+- 기본 GPS 위치 공유: LiveKit data channel로 브로드캐스트, 라이더 간 거리·속도 표시
+- iOS `UIBackgroundModes: audio/location`, Android foreground service (백그라운드 통화)
 
-   ```bash
-   npx expo start
-   ```
+## 시작하기
 
-In the output, you'll find options to open the app in a
+### 1. LiveKit Cloud 키 발급
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+1. https://cloud.livekit.io 에서 프로젝트 생성 (무료 티어로 PoC 충분)
+2. Settings → Keys에서 API Key/Secret 발급
+3. `.env.example`을 `.env`로 복사하고 값 입력
+   - `EXPO_PUBLIC_TOKEN_ENDPOINT`는 이 PC의 **LAN IP** (예: `http://192.168.0.10:8787`)
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### 2. 토큰 서버 실행
 
 ```bash
-npm run reset-project
+npm run token-server
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 3. 앱 실행 (dev client 필요 — WebRTC 네이티브 모듈 때문에 Expo Go 불가)
 
-### Other setup steps
+```bash
+# iOS (Xcode 필요)
+npx expo run:ios --device
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+# Android (Android Studio 필요)
+npx expo run:android --device
+```
 
-## Learn more
+기기 2대 이상에서 같은 Ride 코드 + 같은 Pack으로 참가하면 Full Duplex 통화가 시작된다.
 
-To learn more about developing your project with Expo, look at the following resources:
+### PoC 01 체크리스트 (기획서 37장)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- [ ] 정지 / 20 / 30 / 40 km/h 풍절음·음질
+- [ ] LTE ↔ 5G 전환
+- [ ] 터널/음영지역 재연결
+- [ ] 화면 잠금 + 백그라운드 통화
+- [ ] 음악 병행 재생
+- [ ] 배터리 소모
 
-## Join the community
+## 로드맵
 
-Join our community of developers creating universal apps.
+| 버전 | 내용 | 상태 |
+|---|---|---|
+| v0.1 | Voice PoC + GPS 공유 | **구현됨 (실기기 검증 필요)** |
+| v0.2 | Club/Ride/Pack 관리(Supabase, `supabase/schema.sql`), Leader Channel, Ride All | 스키마 준비됨 |
+| v0.3 | Pack Intelligence (낙오/Split/정지 감지) | |
+| v0.4 | Di2 Phone Bell (BLE 네이티브 모듈) | |
+| v0.5 | GPX / Route Intelligence | |
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 구조
+
+```text
+src/app/          expo-router 화면 (index: 참가, room: Pack Voice)
+src/hooks/        use-location-sharing (GPS → LiveKit data channel)
+src/lib/          config, token, geo
+server/           개발용 LiveKit 토큰 서버 (PoC 전용, 이후 Supabase Edge Function으로 이전)
+supabase/         v0.2 스키마
+```

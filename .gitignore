@@ -41,3 +41,10 @@ example
 # generated native folders
 /ios
 /android
+
+# CNG generated native projects (npx expo prebuild)
+/ios
+/android
+
+# secrets
+.env
