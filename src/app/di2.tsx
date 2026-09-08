@@ -5,7 +5,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { playBell, prepareBell } from '@/lib/bell';
+import {
+  DEFAULT_GESTURE_MAP,
+  GESTURE_KEY_LABEL,
+  GestureKey,
+  GestureSoundMap,
+  SOUNDS,
+  loadGestureSoundMap,
+  nextSound,
+  playSound,
+  prepareSounds,
+  saveGestureSoundMap,
+  soundLabel,
+} from '@/lib/sounds';
 import {
   Di2Event,
   ScannedDevice,
@@ -47,6 +59,9 @@ export default function Di2Screen() {
   const [learning, setLearning] = useState<ButtonSide | null>(null);
   const [learnCount, setLearnCount] = useState(0);
   const [noiseCount, setNoiseCount] = useState(0);
+  const [gestureMap, setGestureMap] = useState<GestureSoundMap>(DEFAULT_GESTURE_MAP);
+  const gestureMapRef = useRef(gestureMap);
+  gestureMapRef.current = gestureMap;
 
   const bellOnRawRef = useRef(bellOnRaw);
   const stopMonitorRef = useRef<(() => void) | null>(null);
@@ -62,13 +77,14 @@ export default function Di2Screen() {
   };
 
   useEffect(() => {
-    prepareBell();
+    prepareSounds();
+    loadGestureSoundMap().then(setGestureMap);
     const engine = new Di2GestureEngine(
       (g) => {
-        addLog(`🎯 ${SIDE_LABEL[g.side]} 버튼 ${GESTURE_LABEL[g.kind]}`, 'gesture');
-        // 기본 매핑: 짧게 1번 = 벨 1번, 2번 연속 = 벨 2번 (추후 Quick Event 매핑 예정)
-        playBell();
-        if (g.kind === 'double') setTimeout(playBell, 350);
+        const key: GestureKey = `${g.side}-${g.kind}`;
+        const sound = gestureMapRef.current[key];
+        addLog(`🎯 ${SIDE_LABEL[g.side]} 버튼 ${GESTURE_LABEL[g.kind]} → ${soundLabel(sound)}`, 'gesture');
+        playSound(sound);
       },
       (side, ok, message) => {
         setLearning(null);
@@ -152,8 +168,16 @@ export default function Di2Screen() {
     addLog(`${e.charUUID.slice(4, 8)} · ${e.hex}`, 'raw');
     if (bellOnRawRef.current && Date.now() - lastBellRef.current > 300) {
       lastBellRef.current = Date.now();
-      playBell();
+      playSound('bell');
     }
+  };
+
+  const cycleMapping = (key: GestureKey) => {
+    setGestureMap((prev) => {
+      const updated = { ...prev, [key]: nextSound(prev[key]) };
+      saveGestureSoundMap(updated);
+      return updated;
+    });
   };
 
   const connect = async (id: string) => {
@@ -204,14 +228,19 @@ export default function Di2Screen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-        <Pressable style={styles.bellButton} onPress={playBell}>
-          <ThemedText type="title" style={styles.bellLabel}>
-            🔔 벨 울리기
-          </ThemedText>
-          <ThemedText type="small" style={styles.bellLabel}>
-            Di2 없이도 항상 동작
-          </ThemedText>
-        </Pressable>
+        <View style={styles.soundGrid}>
+          {SOUNDS.map((s) => (
+            <Pressable key={s.id} style={styles.soundButton} onPress={() => playSound(s.id)}>
+              <ThemedText type="title">{s.emoji}</ThemedText>
+              <ThemedText type="smallBold" style={styles.bellLabel}>
+                {s.label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        <ThemedText type="small" style={styles.gridHint}>
+          이어폰 연결 중에도 본체 스피커로 크게 재생됩니다
+        </ThemedText>
 
         <View style={styles.sectionHeader}>
           <ThemedText type="smallBold">Di2 연결 (PoC)</ThemedText>
@@ -256,6 +285,17 @@ export default function Di2Screen() {
                   초기화
                 </ThemedText>
               </Pressable>
+            </View>
+
+            <View style={styles.mappingBox}>
+              {(Object.keys(GESTURE_KEY_LABEL) as GestureKey[]).map((key) => (
+                <Pressable key={key} style={styles.mappingRow} onPress={() => cycleMapping(key)}>
+                  <ThemedText type="small">{GESTURE_KEY_LABEL[key]}</ThemedText>
+                  <ThemedText type="smallBold" style={styles.link}>
+                    {soundLabel(gestureMap[key])} ›
+                  </ThemedText>
+                </Pressable>
+              ))}
             </View>
 
             <View style={styles.toggleRow}>
@@ -321,14 +361,32 @@ export default function Di2Screen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1, padding: 20, gap: 12 },
-  bellButton: {
+  soundGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  soundButton: {
+    width: '48%',
+    flexGrow: 1,
     backgroundColor: '#208AEF',
-    borderRadius: 20,
-    paddingVertical: 28,
+    borderRadius: 18,
+    paddingVertical: 18,
     alignItems: 'center',
     gap: 4,
   },
+  gridHint: { textAlign: 'center', opacity: 0.7 },
   bellLabel: { color: '#fff' },
+  mappingBox: {
+    borderWidth: 1,
+    borderColor: '#8884',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  mappingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#8884',
+  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
