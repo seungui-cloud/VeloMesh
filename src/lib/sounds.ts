@@ -12,12 +12,14 @@ import { ButtonSide, GestureKind } from './di2-gestures';
  * - Di2 제스처(왼/오 × 1번/2번)별로 소리를 매핑할 수 있다
  */
 
-export type SoundId = 'bell' | 'passing' | 'overtake' | 'warn';
+export type SoundId = 'bell' | 'chime' | 'passing' | 'overtake' | 'thanks' | 'warn';
 
 export const SOUNDS: { id: SoundId; emoji: string; label: string }[] = [
   { id: 'bell', emoji: '🔔', label: '따르릉' },
+  { id: 'chime', emoji: '🛎️', label: '딩동' },
   { id: 'passing', emoji: '🗣️', label: '지나가겠습니다' },
   { id: 'overtake', emoji: '🗣️', label: '추월합니다' },
+  { id: 'thanks', emoji: '🗣️', label: '감사합니다' },
   { id: 'warn', emoji: '📢', label: '경고음' },
 ];
 
@@ -28,8 +30,10 @@ export function soundLabel(id: SoundId): string {
 
 const players: Record<SoundId, AudioPlayer> = {
   bell: createAudioPlayer(require('../../assets/sounds/bell.wav')),
+  chime: createAudioPlayer(require('../../assets/sounds/chime.wav')),
   passing: createAudioPlayer(require('../../assets/sounds/passing.wav')),
   overtake: createAudioPlayer(require('../../assets/sounds/overtake.wav')),
+  thanks: createAudioPlayer(require('../../assets/sounds/thanks.wav')),
   warn: createAudioPlayer(require('../../assets/sounds/warn.wav')),
 };
 for (const p of Object.values(players)) p.volume = 1;
