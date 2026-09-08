@@ -44,6 +44,8 @@ export default function Di2Screen() {
   const [bellOnRaw, setBellOnRaw] = useState(false);
   const [buttonMap, setButtonMap] = useState<ButtonMap>({});
   const [learning, setLearning] = useState<ButtonSide | null>(null);
+  const [learnCount, setLearnCount] = useState(0);
+  const [noiseCount, setNoiseCount] = useState(0);
 
   const bellOnRawRef = useRef(bellOnRaw);
   const stopMonitorRef = useRef<(() => void) | null>(null);
@@ -63,18 +65,17 @@ export default function Di2Screen() {
     const engine = new Di2GestureEngine(
       (g) => {
         addLog(`🎯 ${SIDE_LABEL[g.side]} 버튼 ${GESTURE_LABEL[g.kind]}`, 'gesture');
-        // 기본 매핑: 짧게 1번 = 벨, 2번 = 벨 (추후 Quick Event 매핑 예정), 길게 = 벨
+        // 기본 매핑: 짧게 1번 = 벨 1번, 2번 연속 = 벨 2번 (추후 Quick Event 매핑 예정)
         playBell();
         if (g.kind === 'double') setTimeout(playBell, 350);
       },
-      (side, sig) => {
+      (side, ok, message) => {
         setLearning(null);
-        setButtonMap((prev) => ({ ...prev, [side]: sig }));
-        addLog(
-          `✅ ${SIDE_LABEL[side]} 버튼 등록 완료 (${sig.release ? '누름+뗌 인식 → 길게 판별 가능' : '누름만 인식 → 짧게/2번 판별'})`,
-          'info',
-        );
+        setLearnCount(0);
+        if (ok) setButtonMap({ ...engineRef.current!.getMap() });
+        addLog(`${ok ? '✅' : '⚠️'} ${SIDE_LABEL[side]} 버튼: ${message}`, 'info');
       },
+      (_side, count) => setLearnCount(count),
     );
     engineRef.current = engine;
     loadButtonMap().then((m) => {
@@ -136,17 +137,18 @@ export default function Di2Screen() {
   };
 
   const onEvent = (e: Di2Event) => {
-    const consumed = engineRef.current?.feed(e.charUUID, e.hex, e.ts) ?? false;
-    if (engineRef.current?.isLearning()) {
-      addLog(`👂 학습 신호 수신: ${e.charUUID.slice(4, 8)} · ${e.hex}`, 'info');
+    const engine = engineRef.current;
+    const consumed = engine?.feed(e.charUUID, e.hex, e.ts) ?? false;
+    if (consumed) return; // 학습 샘플 또는 버튼 이벤트 (제스처 로그는 엔진 콜백에서)
+    if (engine?.isNoise(e.charUUID, e.hex)) {
+      // 주기적 상태 방송 (예: 2ac1 반복) → 로그에서 숨기고 개수만 집계
+      setNoiseCount((n) => n + 1);
       return;
     }
-    if (!consumed) {
-      addLog(`${e.charUUID.slice(4, 8)} · ${e.hex}`, 'raw');
-      if (bellOnRawRef.current && Date.now() - lastBellRef.current > 300) {
-        lastBellRef.current = Date.now();
-        playBell();
-      }
+    addLog(`${e.charUUID.slice(4, 8)} · ${e.hex}`, 'raw');
+    if (bellOnRawRef.current && Date.now() - lastBellRef.current > 300) {
+      lastBellRef.current = Date.now();
+      playBell();
     }
   };
 
@@ -181,7 +183,11 @@ export default function Di2Screen() {
   const learn = (side: ButtonSide) => {
     engineRef.current?.startLearning(side);
     setLearning(side);
-    addLog(`${SIDE_LABEL[side]} 버튼 학습 대기 — 지금 Di2 ${SIDE_LABEL[side]} 히든버튼을 한 번 누르세요`, 'info');
+    setLearnCount(0);
+    addLog(
+      `${SIDE_LABEL[side]} 버튼 학습 — Di2 ${SIDE_LABEL[side]} 히든버튼을 천천히 5번 누르세요`,
+      'info',
+    );
   };
 
   const resetButtons = () => {
@@ -236,7 +242,7 @@ export default function Di2Screen() {
                     type="smallBold"
                     style={learning === side ? styles.bellLabel : styles.link}>
                     {learning === side
-                      ? '버튼을 누르세요…'
+                      ? `5번 누르세요… (${learnCount})`
                       : `${SIDE_LABEL[side]} 학습${buttonMap[side] ? ' ✓' : ''}`}
                   </ThemedText>
                 </Pressable>
@@ -252,6 +258,12 @@ export default function Di2Screen() {
               <ThemedText type="small">미등록 신호에도 벨 울리기</ThemedText>
               <Switch value={bellOnRaw} onValueChange={setBellOnRaw} />
             </View>
+
+            {noiseCount > 0 && (
+              <ThemedText type="small" style={styles.hint}>
+                🔇 반복 상태 신호 {noiseCount}건 숨김 (Di2 주기 방송)
+              </ThemedText>
+            )}
 
             <FlatList
               style={styles.list}
