@@ -17,11 +17,12 @@ import {
 import {
   ButtonMap,
   ButtonSide,
+  DEFAULT_BUTTON_MAP,
   Di2GestureEngine,
   GESTURE_LABEL,
   SIDE_LABEL,
+  clearButtonMap,
   loadButtonMap,
-  saveButtonMap,
 } from '@/lib/di2-gestures';
 
 interface LogLine {
@@ -78,9 +79,12 @@ export default function Di2Screen() {
       (_side, count) => setLearnCount(count),
     );
     engineRef.current = engine;
-    loadButtonMap().then((m) => {
-      engine.setMap(m);
-      setButtonMap(m);
+    loadButtonMap().then(({ map, isDefault }) => {
+      engine.setMap(map);
+      setButtonMap(map);
+      if (isDefault) {
+        addLog('기본 버튼 프로필 사용 중 (12단 Di2 실측) — 오작동 시 학습으로 재보정', 'info');
+      }
     });
     return () => {
       engine.dispose();
@@ -185,16 +189,16 @@ export default function Di2Screen() {
     setLearning(side);
     setLearnCount(0);
     addLog(
-      `${SIDE_LABEL[side]} 버튼 학습 — Di2 ${SIDE_LABEL[side]} 히든버튼을 천천히 5번 누르세요`,
+      `${SIDE_LABEL[side]} 버튼 학습 — ${SIDE_LABEL[side]} 히든버튼을 천천히 여러 번 누르세요 (5번 이상 권장, 2.5초 쉬면 완료)`,
       'info',
     );
   };
 
   const resetButtons = () => {
-    engineRef.current?.setMap({});
-    setButtonMap({});
-    saveButtonMap({});
-    addLog('버튼 등록 초기화됨', 'info');
+    clearButtonMap();
+    engineRef.current?.setMap(DEFAULT_BUTTON_MAP);
+    setButtonMap(DEFAULT_BUTTON_MAP);
+    addLog('내 학습 삭제 — 기본 프로필로 복원됨', 'info');
   };
 
   return (
@@ -242,7 +246,7 @@ export default function Di2Screen() {
                     type="smallBold"
                     style={learning === side ? styles.bellLabel : styles.link}>
                     {learning === side
-                      ? `5번 누르세요… (${learnCount})`
+                      ? `누르는 중… (${learnCount})`
                       : `${SIDE_LABEL[side]} 학습${buttonMap[side] ? ' ✓' : ''}`}
                   </ThemedText>
                 </Pressable>

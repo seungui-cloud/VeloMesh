@@ -42,11 +42,45 @@ const STORAGE_KEY = 'di2-button-map-v3';
 const BURST_MS = 400; // 같은 쪽 연속 이벤트를 한 번의 누름으로 묶는 창
 const DOUBLE_MS = 600; // 누름 완료 후 재누름 대기 (2번 판별)
 const LEARN_MIN_SAMPLES = 3;
-const LEARN_IDLE_DONE_MS = 2000; // 마지막 신호 후 이 시간 지나면 학습 확정
-const LEARN_TIMEOUT_MS = 12000;
-const MAX_SAMPLES_PER_SIDE = 12;
+const LEARN_IDLE_DONE_MS = 2500; // 마지막 신호 후 이 시간 지나면 학습 확정
+const LEARN_TIMEOUT_MS = 60000; // 누르는 동안은 계속 기록
+const MAX_SAMPLES_PER_SIDE = 40;
 /** 같은 신호가 이 횟수 이상 반복되면 주기적 노이즈로 간주 */
 export const NOISE_REPEAT_THRESHOLD = 3;
+
+/**
+ * characteristic UUID 정규화: 표준 베이스의 16비트 UUID는 짧은 코드(예: "2ac2")로.
+ * 기본 내장 프로필과 기기별 풀 UUID를 모두 매칭하기 위함.
+ */
+export function normalizeCharUUID(uuid: string): string {
+  const u = uuid.toLowerCase();
+  return u.length > 8 ? u.slice(4, 8) : u;
+}
+
+/**
+ * 기본 내장 버튼 프로필 — 실물 Shimano 12단 Di2(RD-R8150)에서 캡처한 신호.
+ * 같은 구성의 사용자는 학습 없이 바로 동작하고, 다르면 학습으로 덮어쓴다.
+ */
+export const DEFAULT_BUTTON_MAP: ButtonMap = {
+  right: {
+    charUUID: '2ac2',
+    length: 5,
+    samples: [
+      [0x22, 0x11, 0x12, 0xf0, 0xf0],
+      [0x23, 0x11, 0x43, 0xf0, 0xf0],
+      [0x24, 0x11, 0x44, 0xf0, 0xf0],
+    ],
+  },
+  left: {
+    charUUID: '2ac2',
+    length: 5,
+    samples: [
+      [0x2e, 0x49, 0x44, 0xf0, 0xf0],
+      [0x2f, 0x4a, 0x44, 0xf0, 0xf0],
+      [0x20, 0x1b, 0x44, 0xf0, 0xf0],
+    ],
+  },
+};
 
 export function parseHexBytes(hex: string): number[] {
   return hex
@@ -56,17 +90,34 @@ export function parseHexBytes(hex: string): number[] {
     .filter((n) => !Number.isNaN(n));
 }
 
-export async function loadButtonMap(): Promise<ButtonMap> {
+/** UUID를 정규화해 저장/기본 프로필 어느 쪽이든 매칭되게 함 */
+function normalizeMap(map: ButtonMap): ButtonMap {
+  const out: ButtonMap = {};
+  for (const side of ['left', 'right'] as ButtonSide[]) {
+    const p = map[side];
+    if (p) out[side] = { ...p, charUUID: normalizeCharUUID(p.charUUID) };
+  }
+  return out;
+}
+
+/** 저장된 학습이 있으면 그것을, 없으면 내장 기본 프로필을 반환 */
+export async function loadButtonMap(): Promise<{ map: ButtonMap; isDefault: boolean }> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as ButtonMap) : {};
+    if (raw) return { map: normalizeMap(JSON.parse(raw) as ButtonMap), isDefault: false };
   } catch {
-    return {};
+    // fall through to default
   }
+  return { map: DEFAULT_BUTTON_MAP, isDefault: true };
 }
 
 export async function saveButtonMap(map: ButtonMap): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+}
+
+/** 학습 삭제 → 기본 내장 프로필로 복귀 */
+export async function clearButtonMap(): Promise<void> {
+  await AsyncStorage.removeItem(STORAGE_KEY);
 }
 
 interface LearnState {
@@ -103,7 +154,10 @@ export class Di2GestureEngine {
   }
 
   isNoise(charUUID: string, hex: string): boolean {
-    return (this.seenCounts.get(`${charUUID}:${hex}`) ?? 0) >= NOISE_REPEAT_THRESHOLD;
+    return (
+      (this.seenCounts.get(`${normalizeCharUUID(charUUID)}:${hex}`) ?? 0) >=
+      NOISE_REPEAT_THRESHOLD
+    );
   }
 
   startLearning(side: ButtonSide) {
@@ -157,7 +211,8 @@ export class Di2GestureEngine {
   }
 
   /** BLE 이벤트 수신. 버튼/학습으로 소비되면 true. */
-  feed(charUUID: string, hex: string, ts: number): boolean {
+  feed(rawCharUUID: string, hex: string, ts: number): boolean {
+    const charUUID = normalizeCharUUID(rawCharUUID);
     const exact = `${charUUID}:${hex}`;
     this.seenCounts.set(exact, (this.seenCounts.get(exact) ?? 0) + 1);
     const bytes = parseHexBytes(hex);
